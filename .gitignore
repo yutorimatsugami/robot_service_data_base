@@ -1,0 +1,14 @@
+# Database data (do not commit)
+db/data/
+
+# Environment variables (contains secrets)
+.env
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
