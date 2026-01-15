@@ -23,7 +23,7 @@
 ### 1. Clone & Setup / クローンとセットアップ
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/robot_service_data_base.git
+git clone https://github.com/yutorimatsugami/robot_service_data_base.git
 cd robot_service_data_base
 
 # Copy environment template / 環境変数テンプレートをコピー
