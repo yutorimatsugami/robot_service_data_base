@@ -79,7 +79,9 @@ robot_service_data_base/
     │   ├── V1__create_schema.sql
     │   ├── V2__insert_seeds.sql
     │   ├── V3__add_osaka_faq_responses.sql
-    │   └── V4__add_osaka_ad_content.sql
+    │   ├── V4__add_osaka_ad_content.sql
+    │   ├── V5__create_timetable.sql
+    │   └── V6__seed_timetable.sql
     ├── init/             # 初期化SQL (レガシー/参照用)
     │   ├── 01_schema.sql
     │   └── 02_seeds.sql
