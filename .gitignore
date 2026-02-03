@@ -12,3 +12,4 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+db/migrations/V6__seed_timetable.sql
