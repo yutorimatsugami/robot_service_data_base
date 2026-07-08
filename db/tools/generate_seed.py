@@ -110,7 +110,8 @@ def generate_cycle_departures(rng, template, cycle_len, period_start, period_end
             if base_t >= period_end:
                 continue
             jitter = rng.randint(-1, 1)
-            dep_t = int(round(base_t)) + jitter
+            # ジッターで始発時刻(5:00)を割り込まないようクランプする
+            dep_t = max(int(round(base_t)) + jitter, EARLY_START_MIN)
             dest = rng.choice(destinations)
             departures.append((dep_t, train_type, dest))
         cycle_start += cycle_len
