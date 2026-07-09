@@ -47,7 +47,22 @@ cp .env.example .env
 docker-compose up -d
 ```
 
-### 3. Access / アクセス
+### 3. 時刻表データの投入 (V6シード生成) / Timetable Seed Generation
+
+`db/migrations/V6__seed_timetable.sql` は `.gitignore` 対象のため、clone直後は**存在しません**。`train_timetable` テーブルは作成されますが、このステップを行わない限り**空のまま**です。`db/tools/station_topology.json`（駅の路線網データ）から `db/tools/generate_seed.py` がダミーの時刻表データを疑似乱数で生成し、`V6__seed_timetable.sql` として書き出します。
+
+```bash
+python3 db/tools/generate_seed.py
+# 再現性のため乱数シードは固定（引数で上書き可: python3 db/tools/generate_seed.py <seed>）
+
+# 生成後、DBを起動（または起動済みなら再起動）してFlywayに適用させる
+docker-compose up -d
+docker-compose run --rm flyway info   # V6が適用されたことを確認
+```
+
+> **⚠️ 注意**: `V6__seed_timetable.sql` は生成物のためGit管理されません。クリーンな環境でセットアップするたびに、または `station_topology.json` を更新した場合に、このスクリプトを再実行してください。
+
+### 4. Access / アクセス
 
 | サービス | URL | 説明 |
 |---------|-----|------|
@@ -81,10 +96,14 @@ robot_service_data_base/
     │   ├── V3__add_osaka_faq_responses.sql
     │   ├── V4__add_osaka_ad_content.sql
     │   ├── V5__create_timetable.sql
-    │   └── V6__seed_timetable.sql
-    ├── init/             # 初期化SQL (レガシー/参照用)
+    │   ├── V6__seed_timetable.sql          # 生成物 (Git管理外、要generate_seed.py実行。上記手順3を参照)
+    │   └── V6__seed_timetable.sql.README.md
+    ├── init/             # 初期化SQL (レガシー/参照用、V1/V2相当のみ)
     │   ├── 01_schema.sql
     │   └── 02_seeds.sql
+    ├── tools/            # シードデータ生成ツール
+    │   ├── generate_seed.py
+    │   └── station_topology.json
     └── data/             # DBデータ (Git管理外)
 ```
 
@@ -96,9 +115,10 @@ robot_service_data_base/
 |---------|------|
 | `robot_mst` | ロボット管理（ID, ステータス, 位置） |
 | `map_node` | マップノード（駅構内の場所定義） |
-| `ad_content` | 広告・周辺施設情報 |
+| `ad_content` | 広告・周辺施設情報（`map_node_id`は`map_node.node_id`への外部キー） |
 | `faq_responses` | 定型回答データ |
 | `crowd_log` | 混雑ログ |
+| `train_timetable` | 時刻表データ（要V6シード生成、上記参照） |
 
 ---
 
@@ -127,12 +147,13 @@ docker-compose run --rm flyway info
 
 1. `db/migrations/` に新しいファイルを作成
    ```
-   V3__add_new_column.sql   # バージョン番号を付ける
+   V7__add_new_column.sql   # バージョン番号を付ける
    ```
 
 2. ファイル命名規則：
    - `V{バージョン}__{説明}.sql`
-   - 例: `V3__add_floor_to_map_node.sql`
+   - 例: `V7__add_floor_to_map_node.sql`
+   - ⚠️ 既存のマイグレーションと番号が衝突しないよう、`db/migrations/` 内の最新バージョンを確認し、その次の番号を使ってください（本README作成時点の最新は`V6`）。
 
 3. 起動して適用
    ```bash
@@ -172,7 +193,7 @@ docker-compose logs -f db
 
 # DBリセット (データ削除)
 docker-compose down -v
-rm -rf db/data
+sudo rm -rf db/data
 docker-compose up -d
 
 # DBに直接接続
@@ -199,16 +220,16 @@ docker exec -it robot_service_db psql -U robot_user -d robot_service_db
 -- 全ロボットを取得
 SELECT * FROM robot_mst;
 
--- 特定ステータスのロボットを検索
-SELECT * FROM robot_mst WHERE status = 'active';
+-- 特定ステータスのロボットを検索 (statusはINT型: 0:待機, 1:巡回, 2:案内中, 3:遠隔通話中, 9:エラー)
+SELECT * FROM robot_mst WHERE status = 1;
 
 -- マップノード一覧を取得
 SELECT * FROM map_node ORDER BY node_id;
 
--- テーブル結合の例
-SELECT r.robot_id, r.name, m.node_name 
-FROM robot_mst r 
-JOIN map_node m ON r.current_node_id = m.node_id;
+-- テーブル結合の例（広告・周辺施設情報とマップノードの結合）
+SELECT a.shop_name, a.category, m.node_name
+FROM ad_content a
+JOIN map_node m ON a.map_node_id = m.node_id;
 ```
 
 #### psql (コマンドライン) を使う場合
@@ -234,20 +255,21 @@ Flywayマイグレーションを使用してスキーマを変更し、Gitで�
 | ディレクトリ | 用途 |
 |-------------|------|
 | `db/migrations/` | Flywayマイグレーションファイル（推奨） |
-| `db/init/` | レガシー初期化SQL（参照用） |
+| `db/init/` | レガシー初期化SQL（参照用、V1/V2相当の内容のみ。V3以降の変更（大阪駅向けFAQ・広告データ、`train_timetable`等）は反映されておらず、スキーマ参照としては古いので注意） |
 
 #### 変更の手順
 
 1. **新しいマイグレーションファイルを作成**
    ```bash
    # ファイル命名規則: V{バージョン}__{説明}.sql
+   # 既存の最新マイグレーションの次の番号を使用（`db/migrations/`を確認、本README作成時点の最新は`V6`）
    # 例: カラム追加
-   touch db/migrations/V3__add_floor_to_map_node.sql
+   touch db/migrations/V7__add_floor_to_map_node.sql
    ```
 
 2. **SQLを記述**
    ```sql
-   -- V3__add_floor_to_map_node.sql
+   -- V7__add_floor_to_map_node.sql
    ALTER TABLE map_node ADD COLUMN floor INT DEFAULT 1;
    ```
 
